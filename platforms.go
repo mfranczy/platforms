@@ -110,10 +110,13 @@
 package platforms
 
 import (
+	"errors"
 	"fmt"
+	"os"
 	"path"
 	"regexp"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -150,9 +153,32 @@ type matcher struct {
 
 func (m *matcher) Match(platform specs.Platform) bool {
 	normalized := Normalize(platform)
-	return m.OS == normalized.OS &&
+	entryMatch := m.OS == normalized.OS &&
 		m.Architecture == normalized.Architecture &&
 		m.Variant == normalized.Variant
+	if !entryMatch {
+		// entry match didn't pass so it doesn't make sense
+		// to compare platform features and compatibilities
+		return false
+	}
+
+	for _, f := range normalized.Features {
+		if !slices.Contains(m.Features, f) {
+			return false
+		}
+	}
+
+	for k, v := range normalized.Compatibilities {
+		mv, ok := m.Compatibilities[k]
+		if !ok {
+			return false
+		}
+		if v != mv {
+			return false
+		}
+	}
+
+	return true
 }
 
 func (m *matcher) String() string {
@@ -195,6 +221,16 @@ func Parse(specifier string) (specs.Platform, error) {
 	}
 
 	var p specs.Platform
+	// Just a prototype of compatibility support
+	pConfig, err := NewPlatformsConfig()
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return specs.Platform{}, fmt.Errorf("unable to read platform config file '%s': %w", platformsConfigPath, err)
+	}
+	if pConfig != nil {
+		p.Features = pConfig.Features
+		p.Compatibilities = pConfig.Compatibilities
+	}
+
 	switch len(parts) {
 	case 1:
 		// in this case, we will test that the value might be an OS, then look
@@ -285,6 +321,8 @@ func Format(platform specs.Platform) string {
 func Normalize(platform specs.Platform) specs.Platform {
 	platform.OS = normalizeOS(platform.OS)
 	platform.Architecture, platform.Variant = normalizeArch(platform.Architecture, platform.Variant)
+	normalizeFeatures(&platform.Features)
+	normalizeCompatibilities(platform.Compatibilities)
 
 	return platform
 }

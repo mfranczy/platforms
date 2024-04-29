@@ -107,3 +107,17 @@ func normalizeArch(arch, variant string) (string, string) {
 
 	return arch, variant
 }
+
+// normalizeFeatures normalizes the features
+func normalizeFeatures(f *[]string) {
+	for i, v := range *f {
+		(*f)[i] = strings.ToLower(v)
+	}
+}
+
+// normalizeCompatibilities normalizes the compatibilities
+func normalizeCompatibilities(c map[string]string) {
+	for k, v := range c {
+		c[k] = strings.ToLower(v)
+	}
+}
